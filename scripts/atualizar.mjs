@@ -5,9 +5,38 @@
 import { mkdirSync, writeFileSync, readFileSync, existsSync, renameSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { JOBS, PRECO_SYMS, fetchChart, extractChart, extractPreco } from "./lib/mercado.mjs";
+import { JOBS, PRECO_SYMS, ATIVOS, TIMEFRAMES, fetchChart, extractChart, extractPreco } from "./lib/mercado.mjs";
 
 const safe = s => s.replace(/[^A-Za-z0-9]/g, "_");
+
+// Enxuga o JSON do Yahoo: só os campos usados pelo painel, sem barras incompletas e com preço arredondado.
+// Valores abaixo de 10 mantêm 4 casas; os demais, 2 casas (o erro é desprezível para os indicadores).
+export function enxugar(result) {
+  const q = result.indicators.quote[0];
+  const dec = v => {
+    if (v == null) return null;
+    const f = Math.abs(v) < 10 ? 10000 : 100;
+    return Math.round(v * f) / f;
+  };
+  const idx = result.timestamp.map((_, i) => i).filter(i => q.close[i] != null && q.high[i] != null && q.low[i] != null);
+  return {
+    meta: {
+      symbol: result.meta && result.meta.symbol,
+      regularMarketPrice: result.meta && result.meta.regularMarketPrice,
+      marketState: result.meta && result.meta.marketState,
+    },
+    timestamp: idx.map(i => result.timestamp[i]),
+    indicators: {
+      quote: [{
+        open: idx.map(i => dec(q.open ? q.open[i] : null)),
+        high: idx.map(i => dec(q.high[i])),
+        low: idx.map(i => dec(q.low[i])),
+        close: idx.map(i => dec(q.close[i])),
+        volume: idx.map(i => (q.volume ? q.volume[i] : null)),
+      }],
+    },
+  };
+}
 
 function gravar(arq, obj) {
   const tmp = arq + ".tmp";
@@ -38,6 +67,8 @@ export async function executar({ agora = new Date(), out = "site/data", fetchFn 
     }
   }
 
+  gravar(join(out, "ativos.json"), { atualizado: agoraIso, ativos: ATIVOS, timeframes: TIMEFRAMES });
+
   let status = statusAnterior || { jobs: [] };
 
   if (deveAtualizarCandles(agora, { forcar, statusAnterior })) {
@@ -48,7 +79,7 @@ export async function executar({ agora = new Date(), out = "site/data", fetchFn 
       try {
         const payload = await fetchChart(j.sym, j.iv, j.rg, fetchFn);
         const { result, info } = extractChart(payload);
-        gravar(arq, { chart: { result: [result], error: null }, _fetched_at: agoraIso, _source: "Yahoo Finance chart API (GitHub Actions)", _symbol_requested: j.sym });
+        gravar(arq, { chart: { result: [enxugar(result)], error: null }, _fetched_at: agoraIso, _source: "Yahoo Finance chart API (GitHub Actions)", _symbol_requested: j.sym });
         Object.assign(entrada, { ok: true, ...info, fetched_at: agoraIso });
       } catch (e) {
         // mantém o arquivo anterior; o status registra o erro
