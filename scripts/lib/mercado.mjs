@@ -92,7 +92,8 @@ export function extractPreco(payload) {
 
 
 // ---- Ativos e timeframes (Fase 6) ----
-// Cada ativo tem candles 1H e diários de 2 anos. Os sinais de compra/venda seguem só para o ouro.
+// Cada ativo tem candles de 15m a semanal. Os sinais de compra/venda seguem só para o ouro.
+// O 4H não existe no Yahoo: é montado a partir do 1H pelo motor.
 export const ATIVOS = [
   { sym: "GC=F", nome: "Ouro (futuro)", grupo: "ouro" },
   { sym: "^GSPC", nome: "S&P 500", grupo: "indice" },
@@ -109,7 +110,8 @@ export const ATIVOS = [
   { sym: "^FVX", nome: "Juros 5Y", grupo: "macro" },
   { sym: "^VIX", nome: "VIX", grupo: "macro" },
 ];
-export const TIMEFRAMES = { "1h": "2y", "1d": "2y" };
+// Intervalo do Yahoo -> período de histórico. 15m e 30m têm no máximo 60 dias.
+export const TIMEFRAMES = { "15m": "60d", "30m": "60d", "1h": "2y", "1d": "2y", "1wk": "10y" };
 
 const chaveJob = j => j.sym + "|" + j.iv + "|" + j.rg;
 const ATIVOS_JOBS = ATIVOS.flatMap(a =>
