@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Painel de ativos · Viés</title>
+<style>
+  :root { color-scheme: dark; --bg:#0a1020; --card:#111a2e; --borda:#22304f; --txt:#e8edf7; --fraco:#8a97b4; --azul:#2fd3ff; --verde:#3ddc84; --vermelho:#ff5c7a; --amarelo:#ffd166; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--txt); font:15px system-ui,-apple-system,"Segoe UI",sans-serif; padding:env(safe-area-inset-top) 12px env(safe-area-inset-bottom); }
+  header { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:10px 0; }
+  header a { color:var(--azul); text-decoration:none; font-size:14px; }
+  h1 { font-size:17px; margin:0; }
+  .controles { display:flex; flex-direction:column; gap:10px; margin:6px 0 12px; }
+  select { background:var(--card); color:var(--txt); border:1px solid var(--borda); border-radius:10px; padding:11px; font-size:16px; width:100%; }
+  .tfs { display:flex; flex-wrap:wrap; gap:6px; }
+  .tfs button { background:var(--card); color:var(--fraco); border:1px solid var(--borda); border-radius:999px; padding:8px 14px; font-size:14px; min-height:40px; }
+  .tfs button.on { color:var(--bg); background:var(--azul); border-color:var(--azul); font-weight:600; }
+  .grafico iframe { width:100%; height:300px; border:0; border-radius:12px; background:var(--card); }
+  .grid { display:grid; grid-template-columns:1fr; gap:10px; margin-top:12px; }
+  @media (min-width:760px) { .grid { grid-template-columns:1fr 1fr; } .grafico iframe { height:380px; } }
+  .card { background:var(--card); border:1px solid var(--borda); border-radius:14px; padding:12px 14px; }
+  .card h2 { font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--fraco); margin:0 0 8px; font-weight:600; }
+  .linha { display:flex; justify-content:space-between; gap:10px; padding:5px 0; border-bottom:1px dashed var(--borda); font-size:14px; }
+  .linha:last-child { border-bottom:0; }
+  .linha span:first-child { color:var(--fraco); }
+  .destaque { font-size:22px; font-weight:700; margin:2px 0 6px; }
+  .ok { color:var(--verde); } .alerta { color:var(--amarelo); } .ruim { color:var(--vermelho); }
+  .aviso { font-size:13px; color:var(--amarelo); margin-top:6px; }
+  .nota { color:var(--fraco); font-size:12px; line-height:1.5; margin:16px 0 24px; }
+</style>
+</head>
+<body>
+<header>
+  <a href="index.html">← Viés XAU/USD</a>
+  <h1>Painel de ativos</h1>
+</header>
+
+<section class="controles">
+  <select id="ativo" aria-label="Ativo"></select>
+  <div class="tfs" id="tfs" role="group" aria-label="Timeframe"></div>
+</section>
+
+<section class="grafico">
+  <iframe id="tv" title="Gráfico TradingView" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
+</section>
+
+<section class="grid" id="cards"></section>
+
+<p class="nota">
+  Dados: Yahoo Finance, atualizados automaticamente pelo GitHub Actions. Cada cartão mostra a hora da última barra fechada.
+  Barras em formação nunca entram na leitura. O 4H é montado a partir do 1H. O ouro usa o futuro (GC=F) como proxy do spot.
+  Sinais de compra e venda existem só para os ativos marcados para isso; para os demais, a leitura é de contexto e não é recomendação.
+</p>
+
+<script src="motor.js"></script>
+<script src="indicadores.js"></script>
+<script src="estrutura.js"></script>
+<script src="sinais.js"></script>
+<script src="ativos.js"></script>
+<script>
+(function () {
+  const A = window.Ativos, cache = new Map();
+  let cfg = null, tfAtual = "1h", ativoAtual = null;
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const num = (v, d = 2) => v == null || !isFinite(v) ? "–" : v.toLocaleString("pt-BR", { minimumFractionDigits: d, maximumFractionDigits: d });
+  const hora = t => new Date(t).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) + " BRT";
+
+  function ler(url) {
+    if (!cache.has(url)) {
+      cache.set(url, fetch(url, { cache: "no-cache" }).then(r => {
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        return r.json();
+      }));
+    }
+    return cache.get(url);
+  }
+
+  function linha(rotulo, valor, classe) {
+    return '<div class="linha"><span>' + esc(rotulo) + '</span><span class="' + (classe || "") + '">' + valor + '</span></div>';
+  }
+  function card(titulo, corpo) {
+    return '<div class="card"><h2>' + esc(titulo) + '</h2>' + corpo + '</div>';
+  }
+
+  function montarSeletores() {
+    const sel = $("ativo");
+    sel.innerHTML = A.grupos(cfg.ativos).map(g =>
+      '<optgroup label="' + esc(g.grupo) + '">' + g.itens.map(a =>
+        '<option value="' + esc(a.sym) + '">' + esc(a.nome) + '</option>').join("") + '</optgroup>').join("");
+    $("tfs").innerHTML = A.TIMEFRAMES_PAINEL.map(tf =>
+      '<button data-tf="' + tf + '">' + tf + '</button>').join("");
+    $("tfs").querySelectorAll("button").forEach(b => b.onclick = () => { tfAtual = b.dataset.tf; render(); });
+    sel.onchange = () => { ativoAtual = sel.value; render(); };
+  }
+
+  function atualizarBotoes() {
+    $("tfs").querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.tf === tfAtual));
+  }
+
+  async function render() {
+    const a = cfg.ativos.find(x => x.sym === ativoAtual) || cfg.ativos[0];
+    ativoAtual = a.sym;
+    $("ativo").value = a.sym;
+    atualizarBotoes();
+    $("tv").src = "https://s.tradingview.com/widgetembed/?symbol=" + encodeURIComponent(a.tv) +
+      "&interval=" + A.INTERVALO_TV[tfAtual] + "&theme=dark&style=1&locale=br&hide_side_toolbar=1";
+    const cards = $("cards");
+    cards.innerHTML = card("Carregando", '<p class="linha">Lendo ' + esc(a.nome) + " · " + tfAtual + "…</p>");
+    try {
+      const agora = Date.now();
+      const info = A.infoTimeframe(tfAtual, cfg.timeframes);
+      const doc = await ler(A.nomeArquivo(a.sym, info.iv, info.rg));
+      const barras = A.barrasDoTimeframe(A.candlesDoDoc(doc), tfAtual, agora);
+      const sit = A.situacao(barras, tfAtual, agora);
+      const an = A.analisar(barras, tfAtual);
+      let html = "";
+      html += card("Dados", linha("Ativo", esc(a.nome)) +
+        linha("Timeframe", tfAtual + (info.agrega ? " (montado do 1H)" : "")) +
+        linha("Última barra fechada", barras.length ? hora(barras[barras.length - 1].t) : "–") +
+        linha("Situação", sit.ok ? '<span class="ok">atual · ' + sit.idadeMin + ' min</span>' : '<span class="ruim">' + esc(sit.motivo) + "</span>") +
+        linha("Fonte", "Yahoo (GitHub Actions)"));
+      if (an.insuficiente) {
+        html += card("Leitura", '<p class="aviso">Histórico insuficiente para este timeframe (' + an.n + " barras).</p>");
+      } else {
+        const tendCls = an.tendencia === "alta" ? "ok" : an.tendencia === "baixa" ? "ruim" : "alerta";
+        html += card("Preço e tendência",
+          '<div class="destaque">' + num(an.ultimo.c) + '</div>' +
+          linha("Estrutura", '<span class="' + tendCls + '">' + esc(an.tendencia) + "</span>") +
+          linha("EMA 20", num(an.ema20)) + linha("EMA 50", num(an.ema50)) + linha("EMA 200", num(an.ema200)));
+        html += card("Momentum e volatilidade",
+          linha("RSI 14", num(an.rsi, 1), an.rsi > 70 ? "ruim" : an.rsi < 30 ? "ok" : "") +
+          linha("MACD histograma", num(an.macdHist, 3)) +
+          linha("ATR 14", num(an.atr) + (an.atrPct != null ? " (" + num(an.atrPct, 2) + "%)" : "")) +
+          linha("Regime de volatilidade", esc(an.volRegime || "–")));
+        const ev = an.eventos.length ? an.eventos.map(e =>
+          linha(e.tipo.replace(/_/g, " ").toLowerCase(), num(e.nivel) + " · " + hora(e.quando))).join("")
+          : '<p class="linha">Sem eventos recentes.</p>';
+        html += card("Estrutura recente", ev);
+      }
+      if (a.sinais) {
+        html += await cartaoSinais(a);
+      } else {
+        html += card("Sinais", '<p class="aviso">Este ativo mostra só contexto. As regras de compra e venda foram calibradas para o ouro e ainda não foram validadas por backtest aqui.</p>');
+      }
+      cards.innerHTML = html;
+    } catch (e) {
+      cards.innerHTML = card("Sem dados", '<p class="aviso">Não foi possível ler ' + esc(a.nome) + " em " + tfAtual + ": " + esc(e.message) +
+        ". A coleta pode ainda não ter gerado este arquivo.</p>");
+    }
+  }
+
+  async function cartaoSinais(a) {
+    try {
+      const agora = Date.now();
+      const [dD, dH] = await Promise.all([
+        ler(A.nomeArquivo(a.sym, "1d", cfg.timeframes["1d"])),
+        ler(A.nomeArquivo(a.sym, "1h", cfg.timeframes["1h"])),
+      ]);
+      const h1c = A.candlesDoDoc(dH);
+      const d1 = A.fechados(A.candlesDoDoc(dD), "1d", agora);
+      const h1 = A.fechados(h1c, "1h", agora);
+      const h4 = A.barrasDoTimeframe(h1c, "4h", agora);
+      const r = window.Sinais.avaliar({ d1, h4, h1, agoraMs: agora });
+      if (r.estado === "bloqueado") {
+        return card("Sinais · bloqueado", '<p class="aviso">' + r.motivos.map(esc).join("<br>") + "</p>");
+      }
+      const lado = c => {
+        const cls = c.gatilho && c.score >= 75 ? "ok" : c.score >= 60 ? "alerta" : "";
+        let s = linha("Pontuação", '<span class="' + cls + '">' + num(c.score, 1) + " / 100</span>") +
+          linha("Classificação", esc(c.classificacao)) + linha("Gatilho", c.gatilho ? "confirmado" : "não");
+        if (c.niveis) {
+          s += linha("Entrada", num(c.niveis.entrada)) + linha("Stop", num(c.niveis.stop)) +
+            linha("Alvo 1 (1,5R)", num(c.niveis.alvo1)) + linha("Alvo 2 (2,5R)", num(c.niveis.alvo2)) +
+            linha("Risco/retorno", num(c.niveis.rr1, 2) + " / " + num(c.niveis.rr2, 2));
+        }
+        return s;
+      };
+      return card("Compra", lado(r.compra)) + card("Venda", lado(r.venda));
+    } catch (e) {
+      return card("Sinais", '<p class="aviso">Sinais indisponíveis agora: ' + esc(e.message) + "</p>");
+    }
+  }
+
+  async function iniciar() {
+    try {
+      cfg = await ler("data/ativos.json");
+      montarSeletores();
+      ativoAtual = (cfg.ativos.find(a => a.grupo === "ouro") || cfg.ativos[0]).sym;
+      await render();
+    } catch (e) {
+      $("cards").innerHTML = card("Sem dados", '<p class="aviso">Lista de ativos indisponível: ' + esc(e.message) + "</p>");
+    }
+  }
+  iniciar();
+})();
+</script>
+</body>
+</html>
