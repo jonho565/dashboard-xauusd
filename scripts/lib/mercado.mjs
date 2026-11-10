@@ -6,7 +6,7 @@ export const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 
 export const MIN_BARS = 31; // o cliente exige mais de 30 candles válidos
 
 // Séries permitidas. Só estas podem ser lidas pelo site (evita uso como proxy aberto).
-export const JOBS = [
+const JOBS_LEGACY = [
   { sym: "GC=F", iv: "1h", rg: "2y", uso: "XAU · proxy de futuro (motor 1H/4H)" },
   { sym: "GC=F", iv: "1d", rg: "2y", uso: "XAU · proxy de futuro (diário)" },
   { sym: "DX-Y.NYB", iv: "1d", rg: "6mo", uso: "DXY" },
@@ -89,3 +89,39 @@ export function extractPreco(payload) {
     symbol: (r.meta && r.meta.symbol) || null,
   };
 }
+
+
+// ---- Ativos e timeframes (Fase 6) ----
+// Cada ativo tem candles 1H e diários de 2 anos. Os sinais de compra/venda seguem só para o ouro.
+export const ATIVOS = [
+  { sym: "GC=F", nome: "Ouro (futuro)", grupo: "ouro" },
+  { sym: "^GSPC", nome: "S&P 500", grupo: "indice" },
+  { sym: "^IXIC", nome: "Nasdaq Composite", grupo: "indice" },
+  { sym: "^NDX", nome: "Nasdaq-100", grupo: "indice" },
+  { sym: "^NYA", nome: "NYSE Composite", grupo: "indice" },
+  { sym: "SI=F", nome: "Prata", grupo: "commodity" },
+  { sym: "CL=F", nome: "Petróleo WTI", grupo: "commodity" },
+  { sym: "BZ=F", nome: "Petróleo Brent", grupo: "commodity" },
+  { sym: "HG=F", nome: "Cobre", grupo: "commodity" },
+  { sym: "NG=F", nome: "Gás natural", grupo: "commodity" },
+  { sym: "DX-Y.NYB", nome: "DXY", grupo: "macro" },
+  { sym: "^TNX", nome: "Juros 10Y", grupo: "macro" },
+  { sym: "^FVX", nome: "Juros 5Y", grupo: "macro" },
+  { sym: "^VIX", nome: "VIX", grupo: "macro" },
+];
+export const TIMEFRAMES = { "1h": "2y", "1d": "2y" };
+
+const chaveJob = j => j.sym + "|" + j.iv + "|" + j.rg;
+const ATIVOS_JOBS = ATIVOS.flatMap(a =>
+  Object.entries(TIMEFRAMES).map(([iv, rg]) => ({ sym: a.sym, iv, rg, uso: a.nome + " · " + iv }))
+);
+// Une as séries antigas (mantidas para a página atual) com as novas, sem duplicar.
+export const JOBS = (() => {
+  const vistos = new Set();
+  return [...JOBS_LEGACY, ...ATIVOS_JOBS].filter(j => {
+    const k = chaveJob(j);
+    if (vistos.has(k)) return false;
+    vistos.add(k);
+    return true;
+  });
+})();
