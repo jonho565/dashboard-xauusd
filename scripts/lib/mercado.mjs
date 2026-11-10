@@ -94,21 +94,25 @@ export function extractPreco(payload) {
 // ---- Ativos e timeframes (Fase 6) ----
 // Cada ativo tem candles de 15m a semanal. Os sinais de compra/venda seguem só para o ouro.
 // O 4H não existe no Yahoo: é montado a partir do 1H pelo motor.
+// Para adicionar um ativo: inclua uma linha aqui e rode a coleta.
+//   sym: símbolo do Yahoo (dados)      tv: símbolo do gráfico TradingView
+//   grupo: ouro | indice | commodity | macro
+//   sinais: true só se as regras de compra/venda tiverem sido calibradas para o ativo.
 export const ATIVOS = [
-  { sym: "GC=F", nome: "Ouro (futuro)", grupo: "ouro" },
-  { sym: "^GSPC", nome: "S&P 500", grupo: "indice" },
-  { sym: "^IXIC", nome: "Nasdaq Composite", grupo: "indice" },
-  { sym: "^NDX", nome: "Nasdaq-100", grupo: "indice" },
-  { sym: "^NYA", nome: "NYSE Composite", grupo: "indice" },
-  { sym: "SI=F", nome: "Prata", grupo: "commodity" },
-  { sym: "CL=F", nome: "Petróleo WTI", grupo: "commodity" },
-  { sym: "BZ=F", nome: "Petróleo Brent", grupo: "commodity" },
-  { sym: "HG=F", nome: "Cobre", grupo: "commodity" },
-  { sym: "NG=F", nome: "Gás natural", grupo: "commodity" },
-  { sym: "DX-Y.NYB", nome: "DXY", grupo: "macro" },
-  { sym: "^TNX", nome: "Juros 10Y", grupo: "macro" },
-  { sym: "^FVX", nome: "Juros 5Y", grupo: "macro" },
-  { sym: "^VIX", nome: "VIX", grupo: "macro" },
+  { sym: "GC=F", nome: "Ouro (futuro)", grupo: "ouro", tv: "OANDA:XAUUSD", sinais: true },
+  { sym: "^GSPC", nome: "S&P 500", grupo: "indice", tv: "SP:SPX", sinais: false },
+  { sym: "^IXIC", nome: "Nasdaq Composite", grupo: "indice", tv: "NASDAQ:IXIC", sinais: false },
+  { sym: "^NDX", nome: "Nasdaq-100", grupo: "indice", tv: "NASDAQ:NDX", sinais: false },
+  { sym: "^NYA", nome: "NYSE Composite", grupo: "indice", tv: "NYSE:NYA", sinais: false },
+  { sym: "SI=F", nome: "Prata", grupo: "commodity", tv: "OANDA:XAGUSD", sinais: false },
+  { sym: "CL=F", nome: "Petróleo WTI", grupo: "commodity", tv: "TVC:USOIL", sinais: false },
+  { sym: "BZ=F", nome: "Petróleo Brent", grupo: "commodity", tv: "TVC:UKOIL", sinais: false },
+  { sym: "HG=F", nome: "Cobre", grupo: "commodity", tv: "COMEX:HG1!", sinais: false },
+  { sym: "NG=F", nome: "Gás natural", grupo: "commodity", tv: "NYMEX:NG1!", sinais: false },
+  { sym: "DX-Y.NYB", nome: "DXY", grupo: "macro", tv: "TVC:DXY", sinais: false },
+  { sym: "^TNX", nome: "Juros 10Y", grupo: "macro", tv: "TVC:US10Y", sinais: false },
+  { sym: "^FVX", nome: "Juros 5Y", grupo: "macro", tv: "TVC:US05Y", sinais: false },
+  { sym: "^VIX", nome: "VIX", grupo: "macro", tv: "TVC:VIX", sinais: false },
 ];
 // Intervalo do Yahoo -> período de histórico. 15m e 30m têm no máximo 60 dias.
 export const TIMEFRAMES = { "15m": "60d", "30m": "60d", "1h": "2y", "1d": "2y", "1wk": "10y" };
