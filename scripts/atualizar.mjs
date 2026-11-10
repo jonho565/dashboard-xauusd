@@ -1,7 +1,10 @@
 // Coleta os dados do Yahoo e grava arquivos estáticos em site/data/.
-// Roda no GitHub Actions. Preço a cada execução; candles só nas janelas de :00 e :30 (UTC).
+// Roda no GitHub Actions. Preço a cada execução.
+// Candles: em :00-:09 e :30-:39 (UTC), na primeira execução (sem candles ainda)
+// e em disparo manual (FORCAR_CANDLES=true).
 import { mkdirSync, writeFileSync, readFileSync, existsSync, renameSync } from "node:fs";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { JOBS, PRECO_SYMS, fetchChart, extractChart, extractPreco } from "./lib/mercado.mjs";
 
 const safe = s => s.replace(/[^A-Za-z0-9]/g, "_");
@@ -12,14 +15,17 @@ function gravar(arq, obj) {
   renameSync(tmp, arq); // troca atômica: o site nunca lê arquivo pela metade
 }
 
-export function deveAtualizarCandles(agora) {
-  const m = agora.getUTCMinutes() % 30;
-  return m < 10; // execuções em :00-:09 e :30-:39
+export function deveAtualizarCandles(agora, { forcar = false, statusAnterior = null } = {}) {
+  if (forcar) return true;
+  if (!statusAnterior || !Array.isArray(statusAnterior.jobs) || statusAnterior.jobs.length === 0) return true;
+  return agora.getUTCMinutes() % 30 < 10;
 }
 
-export async function executar({ agora = new Date(), out = "site/data", fetchFn = fetch } = {}) {
+export async function executar({ agora = new Date(), out = "site/data", fetchFn = fetch, forcar = false } = {}) {
   mkdirSync(join(out, "chart"), { recursive: true });
   const agoraIso = agora.toISOString();
+  const statusArq = join(out, "status.json");
+  const statusAnterior = existsSync(statusArq) ? JSON.parse(readFileSync(statusArq, "utf8")) : null;
   const resumo = { agora: agoraIso, preco: [], candles: null };
 
   for (const sym of PRECO_SYMS) {
@@ -32,10 +38,9 @@ export async function executar({ agora = new Date(), out = "site/data", fetchFn 
     }
   }
 
-  const statusArq = join(out, "status.json");
-  let status = existsSync(statusArq) ? JSON.parse(readFileSync(statusArq, "utf8")) : { jobs: [] };
+  let status = statusAnterior || { jobs: [] };
 
-  if (deveAtualizarCandles(agora)) {
+  if (deveAtualizarCandles(agora, { forcar, statusAnterior })) {
     const jobs = [];
     for (const j of JOBS) {
       const arq = join(out, "chart", `${safe(j.sym)}_${j.iv}_${j.rg}.json`);
@@ -60,10 +65,10 @@ export async function executar({ agora = new Date(), out = "site/data", fetchFn 
 }
 
 // Execução direta (GitHub Actions)
-if (import.meta.url === `file://${process.argv[1].replace(/\\/g, "/")}` || process.argv[1]?.endsWith("atualizar.mjs")) {
-  executar().then(r => {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  const forcar = process.env.FORCAR_CANDLES === "true";
+  executar({ forcar }).then(r => {
     console.log(JSON.stringify(r));
-    const preco_ok = r.preco.some(p => p.ok);
-    if (!preco_ok) process.exit(1); // sem preço nenhum: falha visível no Actions
+    if (!r.preco.some(p => p.ok)) process.exit(1); // sem preço nenhum: falha visível no Actions
   });
 }
