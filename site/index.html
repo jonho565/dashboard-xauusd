@@ -551,15 +551,23 @@ if ('serviceWorker' in navigator) {
   const sel = document.getElementById("seletorAtivo");
   const viesEls = () => [
     document.getElementById("tape"), document.getElementById("g"), document.getElementById("layoutControlBar"),
-    document.getElementById("f1h") && document.getElementById("f1h").parentElement,
     document.querySelector('button.rb[onclick="load(true)"]'),
   ];
   function aplicar(sym) {
     const ouro = sym === "GC=F";
-    viesEls().forEach(e => { if (e) e.style.display = ouro ? "" : "none"; });
+    // painel unificado: mesmos dados e timeframes para todos os ativos
     document.getElementById("painelAtivos").hidden = false;
+    // bloco macro (drivers do XAU/USD): só aparece no ouro
+    viesEls().forEach(e => { if (e) e.style.display = ouro ? "" : "none"; });
     if (window.AtivosPainel) window.AtivosPainel.ativar(sym);
   }
+
+  // o painel fica antes do bloco macro e o botão 1h/diário antigo é removido (o painel tem todos os timeframes)
+  const painelEl = document.getElementById("painelAtivos");
+  const tapeEl = document.getElementById("tape");
+  if (tapeEl && painelEl) tapeEl.before(painelEl);
+  const tfAntigo = document.getElementById("f1h") && document.getElementById("f1h").parentElement;
+  if (tfAntigo) tfAntigo.style.display = "none";
   fetch("data/ativos.json", { cache: "no-cache" }).then(r => r.json()).then(cfg => {
     const ordem = ["ouro", "indice", "commodity", "macro"];
     sel.innerHTML = ordem.map(g => {
