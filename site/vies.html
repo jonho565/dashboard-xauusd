@@ -68,9 +68,33 @@ input,select{width:100%;padding:8px;border:1px solid rgba(255,255,255,.14);borde
 .layout-tools{display:flex;gap:7px;flex-wrap:wrap;margin:8px 0}
 </style>
 </head><body>
-<div class="top"><div class="brand">◆ TERMINAL <span>DE VIÉS</span></div><div class="tabs"><button id="t0" class="on">XAU/USD</button></div><div class="tabs"><button id="f1h" onclick="setTf('1h')">1h</button><button id="f1d" onclick="setTf('1d')">Diário</button></div><button class="rb" onclick="load(true)">↻ Atualizar</button><span id="stt" class="sub"></span><div id="clk"></div></div>
+<div class="top"><div class="brand">◆ TERMINAL <span>DE VIÉS</span></div><div class="tabs"><select id="seletorAtivo" aria-label="Ativo" style="background:#111a2e;color:#e8edf7;border:1px solid #22304f;border-radius:10px;padding:8px 10px;font-size:15px;min-width:200px"></select><button id="t0" class="on" hidden>XAU/USD</button></div><div class="tabs"><button id="f1h" onclick="setTf('1h')">1h</button><button id="f1d" onclick="setTf('1d')">Diário</button></div><button class="rb" onclick="load(true)">↻ Atualizar</button><span id="stt" class="sub"></span><div id="clk"></div></div>
 <div class="p" id="tape" style="height:76px"><div class="pb"></div></div>
 <div class="g" id="g"></div>
+<style>
+#painelAtivos{font:15px system-ui,-apple-system,"Segoe UI",sans-serif;color:#e8edf7;margin:8px 0 24px}
+#painelAtivos .tfs{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+#painelAtivos .tfs button{background:#111a2e;color:#8a97b4;border:1px solid #22304f;border-radius:999px;padding:8px 14px;font-size:14px;min-height:40px}
+#painelAtivos .tfs button.on{color:#0a1020;background:#2fd3ff;border-color:#2fd3ff;font-weight:600}
+#painelAtivos #tv{width:100%;height:320px;border:0;border-radius:12px;background:#111a2e}
+#painelAtivos #cards{display:grid;grid-template-columns:1fr;gap:10px;margin-top:12px}
+@media(min-width:760px){#painelAtivos #cards{grid-template-columns:1fr 1fr}#painelAtivos #tv{height:380px}}
+#painelAtivos .card{background:#111a2e;border:1px solid #22304f;border-radius:14px;padding:12px 14px}
+#painelAtivos .card h2{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:#8a97b4;margin:0 0 8px;font-weight:600}
+#painelAtivos .linha{display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:1px dashed #22304f;font-size:14px}
+#painelAtivos .linha:last-child{border-bottom:0}
+#painelAtivos .linha span:first-child{color:#8a97b4}
+#painelAtivos .destaque{font-size:22px;font-weight:700;margin:2px 0 6px}
+#painelAtivos .ok{color:#3ddc84}#painelAtivos .alerta{color:#ffd166}#painelAtivos .ruim{color:#ff5c7a}
+#painelAtivos .aviso{font-size:13px;color:#ffd166;margin-top:6px}
+</style>
+<section id="painelAtivos" hidden>
+<select id="ativo" hidden></select>
+<div class="tfs" id="tfs" role="group" aria-label="Timeframe"></div>
+<section class="grafico"><iframe id="tv" title="Gráfico TradingView" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe></section>
+<section id="cards"></section>
+</section>
+
 <p class="note">Cotações, gráficos, calendário e notícias: TradingView (carregado no seu navegador). Candles de XAU/USD e drivers macro: função Netlify atualizada a cada 30 min a partir do Yahoo Finance. Ouro futuro (GC=F) é proxy de futuro, não o preço spot: o gráfico TradingView mostra o XAU/USD spot, mas o cálculo usa o GC=F. Horário de atualização em Status dos dados. Dados podem ter atraso e não são recomendação de investimento.</p>
 <script src="motor.js"></script>
 <script>
@@ -377,9 +401,178 @@ if ('serviceWorker' in navigator) {
   };
 })();
 </script>
-<style>body{padding-bottom:64px !important}</style>
-<nav id="navegacao" style="position:fixed;left:0;right:0;bottom:0;display:flex;gap:8px;justify-content:center;align-items:center;padding:10px 12px calc(10px + env(safe-area-inset-bottom,0px));background:#0a1020;border-top:1px solid #22304f;z-index:9999;font:15px system-ui,-apple-system,'Segoe UI',sans-serif">
-<a href="index.html" style="flex:1;text-align:center;padding:10px;border-radius:10px;text-decoration:none;color:#e8edf7;background:#111a2e;border:1px solid #22304f">Ativos</a>
-<a href="vies.html" style="flex:1;text-align:center;padding:10px;border-radius:10px;text-decoration:none;color:#e8edf7;background:#111a2e;border:1px solid #22304f">Viés XAU/USD</a>
-</nav>
+<script src="indicadores.js"></script>
+<script src="estrutura.js"></script>
+<script src="sinais.js"></script>
+<script src="ativos.js"></script>
+<script>
+(function () {
+  const A = window.Ativos, cache = new Map();
+  let cfg = null, tfAtual = "1h", ativoAtual = null;
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const num = (v, d = 2) => v == null || !isFinite(v) ? "–" : v.toLocaleString("pt-BR", { minimumFractionDigits: d, maximumFractionDigits: d });
+  const hora = t => new Date(t).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) + " BRT";
+
+  function ler(url) {
+    if (!cache.has(url)) {
+      cache.set(url, fetch(url, { cache: "no-cache" }).then(r => {
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        return r.json();
+      }));
+    }
+    return cache.get(url);
+  }
+
+  function linha(rotulo, valor, classe) {
+    return '<div class="linha"><span>' + esc(rotulo) + '</span><span class="' + (classe || "") + '">' + valor + '</span></div>';
+  }
+  function card(titulo, corpo) {
+    return '<div class="card"><h2>' + esc(titulo) + '</h2>' + corpo + '</div>';
+  }
+
+  function montarSeletores() {
+    const sel = $("ativo");
+    sel.innerHTML = A.grupos(cfg.ativos).map(g =>
+      '<optgroup label="' + esc(g.grupo) + '">' + g.itens.map(a =>
+        '<option value="' + esc(a.sym) + '">' + esc(a.nome) + '</option>').join("") + '</optgroup>').join("");
+    $("tfs").innerHTML = A.TIMEFRAMES_PAINEL.map(tf =>
+      '<button data-tf="' + tf + '">' + tf + '</button>').join("");
+    $("tfs").querySelectorAll("button").forEach(b => b.onclick = () => { tfAtual = b.dataset.tf; render(); });
+    sel.onchange = () => { ativoAtual = sel.value; render(); };
+  }
+
+  function atualizarBotoes() {
+    $("tfs").querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.tf === tfAtual));
+  }
+
+  async function render() {
+    const a = cfg.ativos.find(x => x.sym === ativoAtual) || cfg.ativos[0];
+    ativoAtual = a.sym;
+    $("ativo").value = a.sym;
+    atualizarBotoes();
+    $("tv").src = "https://s.tradingview.com/widgetembed/?symbol=" + encodeURIComponent(a.tv) +
+      "&interval=" + A.INTERVALO_TV[tfAtual] + "&theme=dark&style=1&locale=br&hide_side_toolbar=1";
+    const cards = $("cards");
+    cards.innerHTML = card("Carregando", '<p class="linha">Lendo ' + esc(a.nome) + " · " + tfAtual + "…</p>");
+    try {
+      const agora = Date.now();
+      const info = A.infoTimeframe(tfAtual, cfg.timeframes);
+      const doc = await ler(A.nomeArquivo(a.sym, info.iv, info.rg));
+      const barras = A.barrasDoTimeframe(A.candlesDoDoc(doc), tfAtual, agora);
+      const sit = A.situacao(barras, tfAtual, agora);
+      const an = A.analisar(barras, tfAtual);
+      let html = "";
+      html += card("Dados", linha("Ativo", esc(a.nome)) +
+        linha("Timeframe", tfAtual + (info.agrega ? " (montado do 1H)" : "")) +
+        linha("Última barra fechada", barras.length ? hora(barras[barras.length - 1].t) : "–") +
+        linha("Situação", sit.ok ? '<span class="ok">atual · ' + sit.idadeMin + ' min</span>' : '<span class="ruim">' + esc(sit.motivo) + "</span>") +
+        linha("Fonte", "Yahoo (GitHub Actions)"));
+      if (an.insuficiente) {
+        html += card("Leitura", '<p class="aviso">Histórico insuficiente para este timeframe (' + an.n + " barras).</p>");
+      } else {
+        const tendCls = an.tendencia === "alta" ? "ok" : an.tendencia === "baixa" ? "ruim" : "alerta";
+        html += card("Preço e tendência",
+          '<div class="destaque">' + num(an.ultimo.c) + '</div>' +
+          linha("Estrutura", '<span class="' + tendCls + '">' + esc(an.tendencia) + "</span>") +
+          linha("EMA 20", num(an.ema20)) + linha("EMA 50", num(an.ema50)) + linha("EMA 200", num(an.ema200)));
+        html += card("Momentum e volatilidade",
+          linha("RSI 14", num(an.rsi, 1), an.rsi > 70 ? "ruim" : an.rsi < 30 ? "ok" : "") +
+          linha("MACD histograma", num(an.macdHist, 3)) +
+          linha("ATR 14", num(an.atr) + (an.atrPct != null ? " (" + num(an.atrPct, 2) + "%)" : "")) +
+          linha("Regime de volatilidade", esc(an.volRegime || "–")));
+        const ev = an.eventos.length ? an.eventos.map(e =>
+          linha(e.tipo.replace(/_/g, " ").toLowerCase(), num(e.nivel) + " · " + hora(e.quando))).join("")
+          : '<p class="linha">Sem eventos recentes.</p>';
+        html += card("Estrutura recente", ev);
+      }
+      if (a.sinais) {
+        html += await cartaoSinais(a);
+      } else {
+        html += card("Sinais", '<p class="aviso">Este ativo mostra só contexto. As regras de compra e venda foram calibradas para o ouro e ainda não foram validadas por backtest aqui.</p>');
+      }
+      cards.innerHTML = html;
+    } catch (e) {
+      cards.innerHTML = card("Sem dados", '<p class="aviso">Não foi possível ler ' + esc(a.nome) + " em " + tfAtual + ": " + esc(e.message) +
+        ". A coleta pode ainda não ter gerado este arquivo.</p>");
+    }
+  }
+
+  async function cartaoSinais(a) {
+    try {
+      const agora = Date.now();
+      const [dD, dH] = await Promise.all([
+        ler(A.nomeArquivo(a.sym, "1d", cfg.timeframes["1d"])),
+        ler(A.nomeArquivo(a.sym, "1h", cfg.timeframes["1h"])),
+      ]);
+      const h1c = A.candlesDoDoc(dH);
+      const d1 = A.fechados(A.candlesDoDoc(dD), "1d", agora);
+      const h1 = A.fechados(h1c, "1h", agora);
+      const h4 = A.barrasDoTimeframe(h1c, "4h", agora);
+      const r = window.Sinais.avaliar({ d1, h4, h1, agoraMs: agora });
+      if (r.estado === "bloqueado") {
+        return card("Sinais · bloqueado", '<p class="aviso">' + r.motivos.map(esc).join("<br>") + "</p>");
+      }
+      const lado = c => {
+        const cls = c.gatilho && c.score >= 75 ? "ok" : c.score >= 60 ? "alerta" : "";
+        let s = linha("Pontuação", '<span class="' + cls + '">' + num(c.score, 1) + " / 100</span>") +
+          linha("Classificação", esc(c.classificacao)) + linha("Gatilho", c.gatilho ? "confirmado" : "não");
+        if (c.niveis) {
+          s += linha("Entrada", num(c.niveis.entrada)) + linha("Stop", num(c.niveis.stop)) +
+            linha("Alvo 1 (1,5R)", num(c.niveis.alvo1)) + linha("Alvo 2 (2,5R)", num(c.niveis.alvo2)) +
+            linha("Risco/retorno", num(c.niveis.rr1, 2) + " / " + num(c.niveis.rr2, 2));
+        }
+        return s;
+      };
+      return card("Compra", lado(r.compra)) + card("Venda", lado(r.venda));
+    } catch (e) {
+      return card("Sinais", '<p class="aviso">Sinais indisponíveis agora: ' + esc(e.message) + "</p>");
+    }
+  }
+
+  async function iniciar() {
+    try {
+      cfg = await ler("data/ativos.json");
+      montarSeletores();
+      ativoAtual = (cfg.ativos.find(a => a.grupo === "ouro") || cfg.ativos[0]).sym;
+    } catch (e) {
+      $("cards").innerHTML = card("Sem dados", '<p class="aviso">Lista de ativos indisponível: ' + esc(e.message) + "</p>");
+    }
+  }
+  window.AtivosPainel = { ativar(sym) { ativoAtual = sym; $("ativo").value = sym; render(); } };
+  iniciar();
+})();
+</script>
+<script>
+(function () {
+  const sel = document.getElementById("seletorAtivo");
+  const viesEls = () => [
+    document.getElementById("tape"), document.getElementById("g"), document.getElementById("layoutControlBar"),
+    document.getElementById("f1h") && document.getElementById("f1h").parentElement,
+    document.querySelector('button.rb[onclick="load(true)"]'),
+  ];
+  function mostrarVies() {
+    viesEls().forEach(e => { if (e) e.style.display = ""; });
+    document.getElementById("painelAtivos").hidden = true;
+  }
+  function mostrarPainel(sym) {
+    viesEls().forEach(e => { if (e) e.style.display = "none"; });
+    document.getElementById("painelAtivos").hidden = false;
+    if (window.AtivosPainel) window.AtivosPainel.ativar(sym);
+  }
+  fetch("data/ativos.json", { cache: "no-cache" }).then(r => r.json()).then(cfg => {
+    const ordem = ["ouro", "indice", "commodity", "macro"];
+    sel.innerHTML = ordem.map(g => {
+      const itens = cfg.ativos.filter(a => a.grupo === g);
+      if (!itens.length) return "";
+      return '<optgroup label="' + g + '">' + itens.map(a =>
+        '<option value="' + a.sym + '">' + (a.sym === "GC=F" ? "XAU/USD (viés completo)" : a.nome) + "</option>").join("") + "</optgroup>";
+    }).join("");
+    sel.value = "GC=F";
+  }).catch(() => {
+    sel.innerHTML = '<option value="GC=F">XAU/USD (viés completo)</option>';
+  });
+  sel.onchange = () => { if (sel.value === "GC=F") mostrarVies(); else mostrarPainel(sel.value); };
+})();
+</script>
 </body></html>
