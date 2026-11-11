@@ -124,6 +124,7 @@ input,select{width:100%;padding:8px;border:1px solid rgba(255,255,255,.14);borde
 </style>
 <section id="painelAtivos" hidden>
 <select id="ativo" hidden></select>
+<div id="versaoPainel" style="font-size:11px;color:#8a97b4;text-align:right;margin-top:6px"></div>
 <div id="resumoTopo" class="resumo-topo"></div>
 <div class="tfs" id="tfs" role="group" aria-label="Timeframe"></div>
 <section class="grafico"><iframe id="tv" title="Gráfico TradingView" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe></section>
@@ -616,7 +617,19 @@ if ('serviceWorker' in navigator) {
       '<p class="aviso">Descritivo: não é recomendação e os pesos não foram validados por backtest.</p></details>';
   }
 
+  const VERSAO_PAINEL = "3";
+  function confereVersao() {
+    const v = $("versaoPainel");
+    const ok = window.Ativos && window.Ativos.versao === VERSAO_PAINEL && typeof window.Ativos.macroResumo === "function";
+    if (v) v.textContent = "Painel v" + VERSAO_PAINEL + " · ativos.js " + (window.Ativos && window.Ativos.versao ? "v" + window.Ativos.versao : "não carregado") + (ok ? "" : " · ATUALIZE o ativos.js");
+    return ok;
+  }
+
   async function render() {
+    if (!confereVersao()) {
+      $("cards").innerHTML = card("Arquivo desatualizado", '<p class="aviso">O ativos.js publicado não é a versão ' + VERSAO_PAINEL + ". Envie o ativos.js novamente para o repositório e atualize a página.</p>");
+      return;
+    }
     const a = cfg.ativos.find(x => x.sym === ativoAtual) || cfg.ativos[0];
     ativoAtual = a.sym;
     $("ativo").value = a.sym;

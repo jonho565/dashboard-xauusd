@@ -146,7 +146,8 @@
     return { itens, soma, pesoTecnico, pesoMacro, pesoTotal, pct, veredito, temMacro: macro.length > 0 };
   }
 
-  const api = { DURACAO, INTERVALO_TV, TIMEFRAMES_PAINEL, infoTimeframe, nomeArquivo, candlesDoDoc, fechados, barrasDoTimeframe, analisar, situacao, grupos, resumo, macroResumo, PESOS_RESUMO, PESOS_MACRO, LIMIAR_SINAL };
+  const VERSAO = "3";
+  const api = { versao: VERSAO, DURACAO, INTERVALO_TV, TIMEFRAMES_PAINEL, infoTimeframe, nomeArquivo, candlesDoDoc, fechados, barrasDoTimeframe, analisar, situacao, grupos, resumo, macroResumo, PESOS_RESUMO, PESOS_MACRO, LIMIAR_SINAL };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   root.Ativos = api;
 })(typeof self !== "undefined" ? self : globalThis);
