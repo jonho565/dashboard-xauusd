@@ -86,7 +86,38 @@
     return ordem.map(g => ({ grupo: g, itens: ativos.filter(a => a.grupo === g) })).filter(x => x.itens.length);
   }
 
-  const api = { DURACAO, INTERVALO_TV, TIMEFRAMES_PAINEL, infoTimeframe, nomeArquivo, candlesDoDoc, fechados, barrasDoTimeframe, analisar, situacao, grupos };
+  // Sinal de indicadores: cada indicador vota +1 (alta), -1 (baixa) ou 0, com um peso de importância.
+  // Soma ponderada = soma(peso * voto); percentual = soma / peso total.
+  // Descritivo: não é recomendação e não foi validado por backtest.
+  const PESOS_RESUMO = { estrutura: 3, eventos: 2, precoEma200: 2, ema20x50: 2, ema50x200: 1, rsi: 1, macd: 1 };
+  const LIMIAR_SINAL = 0.2;
+  const ROTULO_RESUMO = { estrutura: "Estrutura", eventos: "Último evento estrutural", precoEma200: "Preço × EMA 200", ema20x50: "EMA 20 × EMA 50", ema50x200: "EMA 50 × EMA 200", rsi: "RSI 14", macd: "MACD histograma" };
+
+  function resumo(an) {
+    if (!an || an.insuficiente) return null;
+    const v = {};
+    v.estrutura = an.tendencia === "alta" ? 1 : an.tendencia === "baixa" ? -1 : 0;
+    const ult = an.eventos && an.eventos[0];
+    const altas = ["BOS_ALTA", "RETESTE_ALTA", "REJEICAO_FUNDO", "FALSO_ROMPIMENTO_BAIXA"];
+    const baixas = ["BOS_BAIXA", "RETESTE_BAIXA", "REJEICAO_TOPO", "FALSO_ROMPIMENTO_ALTA"];
+    v.eventos = !ult ? 0 : altas.includes(ult.tipo) ? 1 : baixas.includes(ult.tipo) ? -1 : 0;
+    const sg = x => x == null ? 0 : x > 0 ? 1 : x < 0 ? -1 : 0;
+    v.precoEma200 = an.ema200 == null ? 0 : sg(an.ultimo.c - an.ema200);
+    v.ema20x50 = an.ema50 == null ? 0 : sg(an.ema20 - an.ema50);
+    v.ema50x200 = an.ema200 == null || an.ema50 == null ? 0 : sg(an.ema50 - an.ema200);
+    v.rsi = an.rsi == null ? 0 : an.rsi > 55 ? 1 : an.rsi < 45 ? -1 : 0;
+    v.macd = sg(an.macdHist);
+    const itens = Object.keys(PESOS_RESUMO).map(k => ({
+      chave: k, nome: ROTULO_RESUMO[k], peso: PESOS_RESUMO[k], voto: v[k], pontos: PESOS_RESUMO[k] * v[k],
+    }));
+    const pesoTotal = Object.values(PESOS_RESUMO).reduce((a, b) => a + b, 0);
+    const soma = itens.reduce((a, i) => a + i.pontos, 0);
+    const pct = soma / pesoTotal;
+    const veredito = pct >= LIMIAR_SINAL ? "COMPRA" : pct <= -LIMIAR_SINAL ? "VENDA" : "NEUTRO";
+    return { itens, soma, pesoTotal, pct, veredito };
+  }
+
+  const api = { DURACAO, INTERVALO_TV, TIMEFRAMES_PAINEL, infoTimeframe, nomeArquivo, candlesDoDoc, fechados, barrasDoTimeframe, analisar, situacao, grupos, resumo, PESOS_RESUMO, LIMIAR_SINAL };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   root.Ativos = api;
 })(typeof self !== "undefined" ? self : globalThis);

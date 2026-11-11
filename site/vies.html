@@ -87,9 +87,13 @@ input,select{width:100%;padding:8px;border:1px solid rgba(255,255,255,.14);borde
 #painelAtivos .destaque{font-size:22px;font-weight:700;margin:2px 0 6px}
 #painelAtivos .ok{color:#3ddc84}#painelAtivos .alerta{color:#ffd166}#painelAtivos .ruim{color:#ff5c7a}
 #painelAtivos .aviso{font-size:13px;color:#ffd166;margin-top:6px}
+#painelAtivos .resumo-topo{background:#111a2e;border:1px solid #22304f;border-radius:12px;padding:8px 12px;margin:8px 0;font-size:14px}
+#painelAtivos .rt-linha{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+#painelAtivos .rt-sinal{font-weight:700;padding:3px 10px;border-radius:999px;background:#1b2740}
 </style>
 <section id="painelAtivos" hidden>
 <select id="ativo" hidden></select>
+<div id="resumoTopo" class="resumo-topo"></div>
 <div class="tfs" id="tfs" role="group" aria-label="Timeframe"></div>
 <section class="grafico"><iframe id="tv" title="Gráfico TradingView" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe></section>
 <section id="cards"></section>
@@ -431,6 +435,26 @@ if ('serviceWorker' in navigator) {
     return '<div class="card"><h2>' + esc(titulo) + '</h2>' + corpo + '</div>';
   }
 
+  function topoHtml(res, a, tf) {
+    if (!res) return '<div class="rt-linha">' + esc(a.nome) + " · " + esc(tf) + " · histórico insuficiente para o sinal</div>";
+    const cls = res.veredito === "COMPRA" ? "ok" : res.veredito === "VENDA" ? "ruim" : "alerta";
+    return '<div class="rt-linha"><span class="rt-sinal ' + cls + '">' + res.veredito + "</span><span>" + esc(a.nome) + " · " + esc(tf) +
+      " · soma " + (res.soma > 0 ? "+" : "") + num(res.soma, 1) + " de " + res.pesoTotal +
+      " (" + (res.pct > 0 ? "+" : "") + num(res.pct * 100, 0) + "%)</span></div>";
+  }
+
+  function cardResumo(res) {
+    const cls = res.veredito === "COMPRA" ? "ok" : res.veredito === "VENDA" ? "ruim" : "alerta";
+    const top = res.itens.slice().sort((x, y) => Math.abs(y.pontos) - Math.abs(x.pontos));
+    let corpo = linha("Sinal predominante", '<span class="' + cls + '">' + res.veredito + "</span>") +
+      linha("Soma ponderada", (res.soma > 0 ? "+" : "") + num(res.soma, 1) + " de " + res.pesoTotal);
+    corpo += top.map(i => linha(i.nome + " (peso " + i.peso + ")",
+      (i.pontos > 0 ? "+" : "") + num(i.pontos, 0) + " · " + (i.voto > 0 ? "alta" : i.voto < 0 ? "baixa" : "neutro"),
+      i.voto > 0 ? "ok" : i.voto < 0 ? "ruim" : "")).join("");
+    corpo += '<p class="aviso">Descritivo: soma dos indicadores acima. Não é recomendação e não foi validado por backtest.</p>';
+    return card("Sinal de indicadores", corpo);
+  }
+
   function montarSeletores() {
     const sel = $("ativo");
     sel.innerHTML = A.grupos(cfg.ativos).map(g =>
@@ -462,12 +486,15 @@ if ('serviceWorker' in navigator) {
       const barras = A.barrasDoTimeframe(A.candlesDoDoc(doc), tfAtual, agora);
       const sit = A.situacao(barras, tfAtual, agora);
       const an = A.analisar(barras, tfAtual);
+      const res = A.resumo(an);
+      $("resumoTopo").innerHTML = topoHtml(res, a, tfAtual);
       let html = "";
       html += card("Dados", linha("Ativo", esc(a.nome)) +
         linha("Timeframe", tfAtual + (info.agrega ? " (montado do 1H)" : "")) +
         linha("Última barra fechada", barras.length ? hora(barras[barras.length - 1].t) : "–") +
         linha("Situação", sit.ok ? '<span class="ok">atual · ' + sit.idadeMin + ' min</span>' : '<span class="ruim">' + esc(sit.motivo) + "</span>") +
         linha("Fonte", "Yahoo (GitHub Actions)"));
+      if (res) html += cardResumo(res);
       if (an.insuficiente) {
         html += card("Leitura", '<p class="aviso">Histórico insuficiente para este timeframe (' + an.n + " barras).</p>");
       } else {
