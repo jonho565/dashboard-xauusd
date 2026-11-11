@@ -87,13 +87,38 @@
   }
 
   // Sinal de indicadores: cada indicador vota +1 (alta), -1 (baixa) ou 0, com um peso de importância.
-  // Soma ponderada = soma(peso * voto); percentual = soma / peso total.
+  // Técnicos (peso total 12) e macro (peso total 5) entram na mesma soma.
   // Descritivo: não é recomendação e não foi validado por backtest.
   const PESOS_RESUMO = { estrutura: 3, eventos: 2, precoEma200: 2, ema20x50: 2, ema50x200: 1, rsi: 1, macd: 1 };
-  const LIMIAR_SINAL = 0.2;
   const ROTULO_RESUMO = { estrutura: "Estrutura", eventos: "Último evento estrutural", precoEma200: "Preço × EMA 200", ema20x50: "EMA 20 × EMA 50", ema50x200: "EMA 50 × EMA 200", rsi: "RSI 14", macd: "MACD histograma" };
+  const PESOS_MACRO = { dxy: 2, tnx: 2, vix: 1 };
+  const ROTULO_MACRO = { dxy: "Dólar (DXY)", tnx: "Juros 10Y", vix: "VIX (medo)" };
+  // Efeito de cada driver por grupo: -1 = tendência de alta do driver pesa contra o ativo; +1 = a favor.
+  const SENSIBILIDADE_MACRO = {
+    ouro: { dxy: -1, tnx: -1, vix: 1 },
+    indice: { dxy: 0, tnx: -1, vix: -1 },
+    commodity: { dxy: -1, tnx: 0, vix: 0 },
+  };
+  const LIMIAR_SINAL = 0.2;
 
-  function resumo(an) {
+  // Tendência diária do driver: EMA 20 acima da EMA 50 = alta (+1); abaixo = baixa (-1).
+  function tendenciaDriver(an) {
+    if (!an || an.insuficiente || an.ema20 == null || an.ema50 == null) return 0;
+    return an.ema20 > an.ema50 ? 1 : an.ema20 < an.ema50 ? -1 : 0;
+  }
+
+  // Votos macro do ativo. drivers = { dxy, tnx, vix } com a análise diária de cada um (ou null).
+  function macroResumo(grupo, drivers) {
+    const sens = SENSIBILIDADE_MACRO[grupo];
+    if (!sens) return null;
+    return Object.keys(PESOS_MACRO).map(k => {
+      const t = tendenciaDriver(drivers ? drivers[k] : null);
+      const voto = (sens[k] || 0) * t;
+      return { chave: k, nome: ROTULO_MACRO[k] + " (diário)", tipo: "macro", peso: PESOS_MACRO[k], voto, pontos: PESOS_MACRO[k] * voto };
+    });
+  }
+
+  function resumo(an, macroItens) {
     if (!an || an.insuficiente) return null;
     const v = {};
     v.estrutura = an.tendencia === "alta" ? 1 : an.tendencia === "baixa" ? -1 : 0;
@@ -107,17 +132,21 @@
     v.ema50x200 = an.ema200 == null || an.ema50 == null ? 0 : sg(an.ema50 - an.ema200);
     v.rsi = an.rsi == null ? 0 : an.rsi > 55 ? 1 : an.rsi < 45 ? -1 : 0;
     v.macd = sg(an.macdHist);
-    const itens = Object.keys(PESOS_RESUMO).map(k => ({
-      chave: k, nome: ROTULO_RESUMO[k], peso: PESOS_RESUMO[k], voto: v[k], pontos: PESOS_RESUMO[k] * v[k],
+    const tecnicos = Object.keys(PESOS_RESUMO).map(k => ({
+      chave: k, nome: ROTULO_RESUMO[k], tipo: "tecnico", peso: PESOS_RESUMO[k], voto: v[k], pontos: PESOS_RESUMO[k] * v[k],
     }));
-    const pesoTotal = Object.values(PESOS_RESUMO).reduce((a, b) => a + b, 0);
+    const macro = macroItens || [];
+    const itens = tecnicos.concat(macro);
+    const pesoTecnico = tecnicos.reduce((a, i) => a + i.peso, 0);
+    const pesoMacro = macro.reduce((a, i) => a + i.peso, 0);
+    const pesoTotal = pesoTecnico + pesoMacro;
     const soma = itens.reduce((a, i) => a + i.pontos, 0);
     const pct = soma / pesoTotal;
     const veredito = pct >= LIMIAR_SINAL ? "COMPRA" : pct <= -LIMIAR_SINAL ? "VENDA" : "NEUTRO";
-    return { itens, soma, pesoTotal, pct, veredito };
+    return { itens, soma, pesoTecnico, pesoMacro, pesoTotal, pct, veredito, temMacro: macro.length > 0 };
   }
 
-  const api = { DURACAO, INTERVALO_TV, TIMEFRAMES_PAINEL, infoTimeframe, nomeArquivo, candlesDoDoc, fechados, barrasDoTimeframe, analisar, situacao, grupos, resumo, PESOS_RESUMO, LIMIAR_SINAL };
+  const api = { DURACAO, INTERVALO_TV, TIMEFRAMES_PAINEL, infoTimeframe, nomeArquivo, candlesDoDoc, fechados, barrasDoTimeframe, analisar, situacao, grupos, resumo, macroResumo, PESOS_RESUMO, PESOS_MACRO, LIMIAR_SINAL };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   root.Ativos = api;
 })(typeof self !== "undefined" ? self : globalThis);
