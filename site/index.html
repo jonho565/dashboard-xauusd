@@ -408,7 +408,7 @@ if ('serviceWorker' in navigator) {
 <script>
 (function () {
   const A = window.Ativos, cache = new Map();
-  let cfg = null, tfAtual = "1h", ativoAtual = null;
+  let cfg = null, tfAtual = "1h", ativoAtual = null, pendente = null;
   const $ = id => document.getElementById(id);
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const num = (v, d = 2) => v == null || !isFinite(v) ? "–" : v.toLocaleString("pt-BR", { minimumFractionDigits: d, maximumFractionDigits: d });
@@ -486,11 +486,7 @@ if ('serviceWorker' in navigator) {
           : '<p class="linha">Sem eventos recentes.</p>';
         html += card("Estrutura recente", ev);
       }
-      if (a.sinais) {
-        html += await cartaoSinais(a);
-      } else {
-        html += card("Sinais", '<p class="aviso">Este ativo mostra só contexto. As regras de compra e venda foram calibradas para o ouro e ainda não foram validadas por backtest aqui.</p>');
-      }
+      html += await cartaoSinais(a);
       cards.innerHTML = html;
     } catch (e) {
       cards.innerHTML = card("Sem dados", '<p class="aviso">Não foi possível ler ' + esc(a.nome) + " em " + tfAtual + ": " + esc(e.message) +
@@ -524,6 +520,12 @@ if ('serviceWorker' in navigator) {
         }
         return s;
       };
+      if (!a.sinais) {
+        return card("Viés técnico · contexto",
+          linha("Pontuação de alta", num(r.compra.score, 1) + " / 100") +
+          linha("Pontuação de baixa", num(r.venda.score, 1) + " / 100") +
+          '<p class="aviso">Leitura de contexto, não é sinal de compra ou venda. As regras foram calibradas para o ouro e ainda não foram validadas por backtest.</p>');
+      }
       return card("Compra", lado(r.compra)) + card("Venda", lado(r.venda));
     } catch (e) {
       return card("Sinais", '<p class="aviso">Sinais indisponíveis agora: ' + esc(e.message) + "</p>");
@@ -534,12 +536,13 @@ if ('serviceWorker' in navigator) {
     try {
       cfg = await ler("data/ativos.json");
       montarSeletores();
-      ativoAtual = (cfg.ativos.find(a => a.grupo === "ouro") || cfg.ativos[0]).sym;
+      ativoAtual = pendente || (cfg.ativos.find(a => a.grupo === "ouro") || cfg.ativos[0]).sym;
+      pendente = null;
     } catch (e) {
       $("cards").innerHTML = card("Sem dados", '<p class="aviso">Lista de ativos indisponível: ' + esc(e.message) + "</p>");
     }
   }
-  window.AtivosPainel = { ativar(sym) { ativoAtual = sym; $("ativo").value = sym; render(); } };
+  window.AtivosPainel = { ativar(sym) { if (!cfg) { pendente = sym; return; } ativoAtual = sym; $("ativo").value = sym; render(); } };
   iniciar();
 })();
 </script>
@@ -551,12 +554,9 @@ if ('serviceWorker' in navigator) {
     document.getElementById("f1h") && document.getElementById("f1h").parentElement,
     document.querySelector('button.rb[onclick="load(true)"]'),
   ];
-  function mostrarVies() {
-    viesEls().forEach(e => { if (e) e.style.display = ""; });
-    document.getElementById("painelAtivos").hidden = true;
-  }
-  function mostrarPainel(sym) {
-    viesEls().forEach(e => { if (e) e.style.display = "none"; });
+  function aplicar(sym) {
+    const ouro = sym === "GC=F";
+    viesEls().forEach(e => { if (e) e.style.display = ouro ? "" : "none"; });
     document.getElementById("painelAtivos").hidden = false;
     if (window.AtivosPainel) window.AtivosPainel.ativar(sym);
   }
@@ -569,10 +569,12 @@ if ('serviceWorker' in navigator) {
         '<option value="' + a.sym + '">' + (a.sym === "GC=F" ? "XAU/USD (viés completo)" : a.nome) + "</option>").join("") + "</optgroup>";
     }).join("");
     sel.value = "GC=F";
+    aplicar("GC=F");
   }).catch(() => {
     sel.innerHTML = '<option value="GC=F">XAU/USD (viés completo)</option>';
+    aplicar("GC=F");
   });
-  sel.onchange = () => { if (sel.value === "GC=F") mostrarVies(); else mostrarPainel(sel.value); };
+  sel.onchange = () => aplicar(sel.value);
 })();
 </script>
 </body></html>
