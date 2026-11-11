@@ -90,6 +90,37 @@ input,select{width:100%;padding:8px;border:1px solid rgba(255,255,255,.14);borde
 #painelAtivos .resumo-topo{background:#111a2e;border:1px solid #22304f;border-radius:12px;padding:8px 12px;margin:8px 0;font-size:14px}
 #painelAtivos .rt-linha{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 #painelAtivos .rt-sinal{font-weight:700;padding:3px 10px;border-radius:999px;background:#1b2740}
+#painelAtivos .gr{display:grid;grid-template-columns:1fr;gap:12px;margin-top:12px}
+@media(min-width:760px){#painelAtivos .gr{grid-template-columns:1fr 1fr}}
+#painelAtivos .c{background:linear-gradient(180deg,#121d38,#0d1629);border:1px solid #1f2d4d;border-radius:18px;padding:14px;position:relative;min-height:90px}
+#painelAtivos .c h3{font-size:15px;margin:0 0 10px;color:#e8edf7;font-weight:600;padding-right:90px}
+#painelAtivos .badge{position:absolute;top:12px;right:12px;font-size:11px;font-weight:700;border:1px solid;border-radius:999px;padding:3px 9px;letter-spacing:.04em}
+#painelAtivos .tiles{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+#painelAtivos .tile{background:#0b1426;border:1px solid #1f2d4d;border-radius:12px;padding:10px}
+#painelAtivos .tile span{display:block;font-size:12px;color:#8a97b4}
+#painelAtivos .tile b{font-size:17px}
+#painelAtivos .preco{font-size:28px;font-weight:700;margin:2px 0}
+#painelAtivos .spark{width:100%;height:46px;margin:4px 0 8px}
+#painelAtivos .vg-sig{font-size:28px;font-weight:800;letter-spacing:.02em}
+#painelAtivos .vg-soma{font-size:20px;font-weight:700;text-align:right}
+#painelAtivos .vg-soma small{display:block;font-size:12px;color:#8a97b4;font-weight:400}
+#painelAtivos .donuts{display:flex;justify-content:space-around;gap:6px;margin:6px 0}
+#painelAtivos .donut{width:130px;text-align:center}
+#painelAtivos .donut svg{width:120px;height:120px}
+#painelAtivos .trilho{fill:none;stroke:#1d2a47;stroke-width:9}
+#painelAtivos .arco{fill:none;stroke-width:9;stroke-linecap:round}
+#painelAtivos .centro{fill:#e8edf7;font-size:17px;font-weight:700;text-anchor:middle;dominant-baseline:middle}
+#painelAtivos .dlab{font-size:13px;color:#8a97b4;margin-top:2px}
+#painelAtivos .forca{font-size:12px;color:#8a97b4;text-align:center;margin:0 0 8px}
+#painelAtivos .row{display:flex;align-items:center;gap:10px;background:#0b1426;border:1px solid #1f2d4d;border-radius:12px;padding:10px;margin-top:8px}
+#painelAtivos .row .med{font-size:20px;width:26px;text-align:center}
+#painelAtivos .row .txt{flex:1;font-size:14px}
+#painelAtivos .row .txt small{display:block;color:#8a97b4;font-size:12px}
+#painelAtivos .row .pts{font-weight:700;font-size:15px}
+#painelAtivos .pill{font-size:12px;border-radius:999px;padding:3px 9px;border:1px solid #2fd3ff;color:#2fd3ff}
+#painelAtivos details.det{margin-top:12px;background:#0b1426;border:1px solid #1f2d4d;border-radius:14px;padding:10px 14px}
+#painelAtivos details.det summary{cursor:pointer;color:#8a97b4;font-size:13px}
+
 </style>
 <section id="painelAtivos" hidden>
 <select id="ativo" hidden></select>
@@ -446,13 +477,32 @@ if ('serviceWorker' in navigator) {
   function cardResumo(res) {
     const cls = res.veredito === "COMPRA" ? "ok" : res.veredito === "VENDA" ? "ruim" : "alerta";
     const top = res.itens.slice().sort((x, y) => Math.abs(y.pontos) - Math.abs(x.pontos));
+    const somaTec = res.itens.filter(i => i.tipo === "tecnico").reduce((x, i) => x + i.pontos, 0);
+    const somaMac = res.itens.filter(i => i.tipo === "macro").reduce((x, i) => x + i.pontos, 0);
     let corpo = linha("Sinal predominante", '<span class="' + cls + '">' + res.veredito + "</span>") +
-      linha("Soma ponderada", (res.soma > 0 ? "+" : "") + num(res.soma, 1) + " de " + res.pesoTotal);
+      linha("Soma ponderada", (res.soma > 0 ? "+" : "") + num(res.soma, 1) + " de " + res.pesoTotal) +
+      linha("Análise técnica (peso " + res.pesoTecnico + ")", (somaTec > 0 ? "+" : "") + num(somaTec, 1)) +
+      (res.temMacro ? linha("Análise macro (peso " + res.pesoMacro + ")", (somaMac > 0 ? "+" : "") + num(somaMac, 1)) : "");
     corpo += top.map(i => linha(i.nome + " (peso " + i.peso + ")",
       (i.pontos > 0 ? "+" : "") + num(i.pontos, 0) + " · " + (i.voto > 0 ? "alta" : i.voto < 0 ? "baixa" : "neutro"),
       i.voto > 0 ? "ok" : i.voto < 0 ? "ruim" : "")).join("");
-    corpo += '<p class="aviso">Descritivo: soma dos indicadores acima. Não é recomendação e não foi validado por backtest.</p>';
+    if (!res.temMacro) corpo += '<p class="aviso">Sem dados macro para este grupo: a soma usa só a análise técnica.</p>';
+    corpo += '<p class="aviso">Descritivo: soma dos indicadores acima. Os pesos e a sensibilidade macro são uma definição inicial e não foram validados por backtest. Não é recomendação.</p>';
     return card("Sinal de indicadores", corpo);
+  }
+
+  async function carregarMacro(a) {
+    if (a.grupo === "macro") return null;
+    const mapa = { dxy: "DX-Y.NYB", tnx: "^TNX", vix: "^VIX" };
+    const drivers = {};
+    await Promise.all(Object.keys(mapa).map(async k => {
+      try {
+        const doc = await ler(A.nomeArquivo(mapa[k], "1d", cfg.timeframes["1d"]));
+        const c = A.fechados(A.candlesDoDoc(doc), "1d", Date.now());
+        drivers[k] = A.analisar(c, "1d");
+      } catch (e) { drivers[k] = null; }
+    }));
+    return A.macroResumo(a.grupo, drivers);
   }
 
   function montarSeletores() {
@@ -468,6 +518,102 @@ if ('serviceWorker' in navigator) {
 
   function atualizarBotoes() {
     $("tfs").querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.tf === tfAtual));
+  }
+
+  const CORES = { COMPRA: "#3ddc84", VENDA: "#ff5c7a", NEUTRO: "#ffd166" };
+  const ROTULO_BOLHA = { COMPRA: "COMPRA", VENDA: "VENDA", NEUTRO: "NEUTRO" };
+  const sinalPct = p => p >= 0.2 ? "COMPRA" : p <= -0.2 ? "VENDA" : "NEUTRO";
+  const somaItens = its => {
+    const s = its.reduce((x, i) => x + i.pontos, 0), p = its.reduce((x, i) => x + i.peso, 0);
+    return { soma: s, peso: p, pct: p ? s / p : 0 };
+  };
+  const badge = rot => '<span class="badge" style="color:' + CORES[rot] + ';border-color:' + CORES[rot] + '">' + ROTULO_BOLHA[rot] + "</span>";
+  const sinalSo = its => its.length ? badge(sinalPct(somaItens(its).pct)) : "";
+
+  function donut(forca, titulo, centro) {
+    const r = 42, c = 2 * Math.PI * r, f = Math.max(0, Math.min(100, forca));
+    const cor = f >= 60 ? CORES.COMPRA : f <= 40 ? CORES.VENDA : CORES.NEUTRO;
+    return '<div class="donut"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="' + r + '" class="trilho"/>' +
+      '<circle cx="50" cy="50" r="' + r + '" class="arco" stroke="' + cor + '" stroke-dasharray="' + (c * f / 100).toFixed(1) + " " + c.toFixed(1) +
+      '" transform="rotate(-90 50 50)"/><text x="50" y="50" class="centro">' + centro + '</text></svg><div class="dlab">' + titulo + "</div></div>";
+  }
+
+  function sparkline(closes) {
+    if (closes.length < 2) return "";
+    const w = 300, h = 46, mn = Math.min(...closes), mx = Math.max(...closes), dif = (mx - mn) || 1;
+    const pts = closes.map((v, i) => (i * w / (closes.length - 1)).toFixed(1) + "," + (h - (v - mn) / dif * h - 2).toFixed(1)).join(" ");
+    return '<svg class="spark" viewBox="0 0 ' + w + " " + h + '" preserveAspectRatio="none"><polyline points="' + pts + '" fill="none" stroke="#2fd3ff" stroke-width="2"/></svg>';
+  }
+
+  const tile = (rot, val, cls) => '<div class="tile"><span>' + rot + "</span><b class=\"" + (cls || "") + '">' + val + "</b></div>";
+
+  function htmlPainel(a, tf, barras, sit, an, res) {
+    const grupo = c => res.itens.filter(i => c.includes(i.chave));
+    const tendencia = grupo(["estrutura", "precoEma200", "ema20x50", "ema50x200"]);
+    const momentum = grupo(["rsi", "macd"]);
+    const estrutura = grupo(["eventos"]);
+    const macro = res.itens.filter(i => i.tipo === "macro");
+    const tec = somaItens(res.itens.filter(i => i.tipo === "tecnico"));
+    const mac = res.temMacro ? somaItens(macro) : null;
+    const dir = Math.sign(res.pct);
+    const votados = res.itens.filter(i => i.voto !== 0);
+    const concord = votados.length ? votados.filter(i => Math.sign(i.voto) === dir).reduce((x, i) => x + i.peso, 0) / votados.reduce((x, i) => x + i.peso, 0) * 100 : 0;
+    const chavePrev = "vies:" + a.sym + ":" + tf;
+    let prev = null; try { prev = parseFloat(localStorage.getItem(chavePrev)); } catch (e) {}
+    const delta = prev != null && !isNaN(prev) ? res.soma - prev : null;
+    try { localStorage.setItem(chavePrev, String(res.soma)); } catch (e) {}
+    const cor = CORES[res.veredito];
+    const fmt = v => (v > 0 ? "+" : "") + num(v, 1);
+    const ultimos = barras.slice(-40).map(x => x.c);
+    const rsiCls = an.rsi > 70 ? "ruim" : an.rsi < 30 ? "ok" : "";
+
+    let h = '<div class="c"><h3>Visão geral · ' + esc(a.nome) + " · " + esc(tf) + "</h3>" +
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px"><div class="vg-sig" style="color:' + cor + '">' + res.veredito + "</div>" +
+      '<div class="vg-soma">' + fmt(res.soma) + "<small>de " + res.pesoTotal + " pontos</small></div></div>" +
+      '<div class="donuts">' + donut((tec.pct + 1) / 2 * 100, "Técnico", num((tec.pct + 1) / 2 * 100, 0) + "%") +
+      (mac ? donut((mac.pct + 1) / 2 * 100, "Macro", num((mac.pct + 1) / 2 * 100, 0) + "%") : donut(50, "Macro", "–")) + "</div>" +
+      '<p class="forca">Força altista (50% = neutro)</p>' +
+      '<div class="tiles">' + tile("Δ vs leitura anterior", delta == null ? "–" : fmt(delta)) + tile("Concordância", num(concord, 0) + "%") + "</div></div>";
+
+    h += '<div class="c"><h3>Preço e tendência</h3>' + sinalSo(tendencia) +
+      '<div class="preco">' + num(an.ultimo.c) + "</div>" + sparkline(ultimos) +
+      '<div class="tiles">' + tile("Estrutura", esc(an.tendencia), an.tendencia === "alta" ? "ok" : an.tendencia === "baixa" ? "ruim" : "alerta") +
+      tile("EMA 20", num(an.ema20)) + tile("EMA 50", num(an.ema50)) + tile("EMA 200", num(an.ema200)) + "</div></div>";
+
+    h += '<div class="c"><h3>Momentum e volatilidade</h3>' + sinalSo(momentum) +
+      '<div class="tiles">' + tile("RSI 14", num(an.rsi, 1), rsiCls) + tile("MACD histograma", num(an.macdHist, 3)) +
+      tile("ATR 14", num(an.atr) + (an.atrPct != null ? " (" + num(an.atrPct, 2) + "%)" : "")) +
+      tile("Regime", esc(an.volRegime || "–")) + "</div></div>";
+
+    const evs = an.eventos.length ? an.eventos.map(e => '<div class="row"><div class="txt">' + esc(e.tipo.replace(/_/g, " ").toLowerCase()) +
+      "<small>" + hora(e.quando) + '</small></div><div class="pts">' + num(e.nivel) + "</div></div>").join("") : '<p class="forca">Sem eventos recentes.</p>';
+    h += '<div class="c"><h3>Estrutura recente</h3>' + sinalSo(estrutura) + evs + "</div>";
+
+    if (res.temMacro) {
+      h += '<div class="c"><h3>Macro · drivers diários</h3>' + sinalSo(macro) +
+        macro.map(i => '<div class="row"><div class="med">' + (i.voto > 0 ? "▲" : i.voto < 0 ? "▼" : "•") + '</div><div class="txt">' + esc(i.nome) +
+        "<small>peso " + i.peso + ' · ' + (i.voto > 0 ? "a favor" : i.voto < 0 ? "contra" : "neutro") + '</small></div><div class="pts" style="color:' +
+        (i.voto > 0 ? CORES.COMPRA : i.voto < 0 ? CORES.VENDA : "#8a97b4") + '">' + fmt(i.pontos) + "</div></div>").join("") + "</div>";
+    } else {
+      h += '<div class="c"><h3>Macro</h3><p class="forca">Sem drivers macro para este grupo. A soma usa só a análise técnica.</p></div>';
+    }
+
+    h += '<div class="c"><h3>Dados</h3><div class="tiles">' + tile("Timeframe", esc(tf)) +
+      tile("Última barra", hora(barras[barras.length - 1].t)) +
+      tile("Situação", sit.ok ? '<span class="ok">atual · ' + sit.idadeMin + " min</span>" : '<span class="ruim">' + esc(sit.motivo) + "</span>") +
+      tile("Fonte", "Yahoo (Actions)") + "</div></div>";
+
+    const top = res.itens.slice().sort((x, y) => Math.abs(y.pontos) - Math.abs(x.pontos)).slice(0, 3);
+    const medalhas = ["🏆", "🥈", "🥉"];
+    h += '<div class="c"><h3>Top 3 fatores</h3>' + top.map((i, k) => '<div class="row"><div class="med">' + medalhas[k] + '</div><div class="txt">' +
+      esc(i.nome) + "<small>" + (i.voto > 0 ? "a favor · alta" : i.voto < 0 ? "contra · baixa" : "neutro") + " · peso " + i.peso + '</small></div><div class="pts" style="color:' +
+      (i.voto > 0 ? CORES.COMPRA : i.voto < 0 ? CORES.VENDA : "#8a97b4") + '">' + fmt(i.pontos) + "</div></div>").join("") + "</div>";
+
+    const todos = res.itens.map(i => "<div style=\"display:flex;justify-content:space-between;padding:4px 0;font-size:13px\"><span>" + esc(i.nome) +
+      " (peso " + i.peso + ')</span><span>' + fmt(i.pontos) + "</span></div>").join("");
+    return '<div class="gr">' + h + "</div>" +
+      '<details class="det"><summary>Todos os indicadores, pesos e votos (' + res.itens.length + ")</summary>" + todos +
+      '<p class="aviso">Descritivo: não é recomendação e os pesos não foram validados por backtest.</p></details>';
   }
 
   async function render() {
@@ -486,35 +632,14 @@ if ('serviceWorker' in navigator) {
       const barras = A.barrasDoTimeframe(A.candlesDoDoc(doc), tfAtual, agora);
       const sit = A.situacao(barras, tfAtual, agora);
       const an = A.analisar(barras, tfAtual);
-      const res = A.resumo(an);
+      const macro = await carregarMacro(a);
+      const res = A.resumo(an, macro);
       $("resumoTopo").innerHTML = topoHtml(res, a, tfAtual);
-      let html = "";
-      html += card("Dados", linha("Ativo", esc(a.nome)) +
-        linha("Timeframe", tfAtual + (info.agrega ? " (montado do 1H)" : "")) +
-        linha("Última barra fechada", barras.length ? hora(barras[barras.length - 1].t) : "–") +
-        linha("Situação", sit.ok ? '<span class="ok">atual · ' + sit.idadeMin + ' min</span>' : '<span class="ruim">' + esc(sit.motivo) + "</span>") +
-        linha("Fonte", "Yahoo (GitHub Actions)"));
-      if (res) html += cardResumo(res);
-      if (an.insuficiente) {
-        html += card("Leitura", '<p class="aviso">Histórico insuficiente para este timeframe (' + an.n + " barras).</p>");
-      } else {
-        const tendCls = an.tendencia === "alta" ? "ok" : an.tendencia === "baixa" ? "ruim" : "alerta";
-        html += card("Preço e tendência",
-          '<div class="destaque">' + num(an.ultimo.c) + '</div>' +
-          linha("Estrutura", '<span class="' + tendCls + '">' + esc(an.tendencia) + "</span>") +
-          linha("EMA 20", num(an.ema20)) + linha("EMA 50", num(an.ema50)) + linha("EMA 200", num(an.ema200)));
-        html += card("Momentum e volatilidade",
-          linha("RSI 14", num(an.rsi, 1), an.rsi > 70 ? "ruim" : an.rsi < 30 ? "ok" : "") +
-          linha("MACD histograma", num(an.macdHist, 3)) +
-          linha("ATR 14", num(an.atr) + (an.atrPct != null ? " (" + num(an.atrPct, 2) + "%)" : "")) +
-          linha("Regime de volatilidade", esc(an.volRegime || "–")));
-        const ev = an.eventos.length ? an.eventos.map(e =>
-          linha(e.tipo.replace(/_/g, " ").toLowerCase(), num(e.nivel) + " · " + hora(e.quando))).join("")
-          : '<p class="linha">Sem eventos recentes.</p>';
-        html += card("Estrutura recente", ev);
+      if (an.insuficiente || !res) {
+        cards.innerHTML = card("Leitura", '<p class="aviso">Histórico insuficiente para este timeframe (' + an.n + " barras).</p>");
+        return;
       }
-      html += await cartaoSinais(a);
-      cards.innerHTML = html;
+      cards.innerHTML = htmlPainel(a, tfAtual, barras, sit, an, res) + (await cartaoSinais(a));
     } catch (e) {
       cards.innerHTML = card("Sem dados", '<p class="aviso">Não foi possível ler ' + esc(a.nome) + " em " + tfAtual + ": " + esc(e.message) +
         ". A coleta pode ainda não ter gerado este arquivo.</p>");
